@@ -7,6 +7,7 @@
 - 本轮验收：[docs/PRODUCT-ACCEPTANCE.md](docs/PRODUCT-ACCEPTANCE.md)。
 - 架构与分工：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 - AI 开发过程：[docs/AI-WORKLOG.md](docs/AI-WORKLOG.md)。
+- 开发过程记录：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 - 验证记录：[docs/VALIDATION.md](docs/VALIDATION.md)。
 
 已完成企业核查、补证对照、三行交接卡、本地模拟交接、导入导出和备份恢复。25 项规则与数据测试、11 组浏览器测试通过，配有实际演示视频。

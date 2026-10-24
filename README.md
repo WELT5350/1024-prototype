@@ -42,6 +42,7 @@ Windows 也可以双击 [start.cmd](start.cmd)，它会启动仅监听本机的�
 - [实际字段变化](demo/field-diff.png)
 - [架构、模块规格与分工](docs/ARCHITECTURE.md)
 - [AI 开发过程](docs/AI-WORKLOG.md)
+- [开发 PR 摘要与提交记录](docs/DEVELOPMENT.md)
 - [验证记录](docs/VALIDATION.md)
 
 ## 数据操作
