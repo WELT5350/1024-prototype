@@ -16,7 +16,7 @@ cd 1024-prototype
 npm start
 ```
 
-浏览器打开 **http://127.0.0.1:4173**。使用原生 ES Modules，请通过本地 HTTP 服务运行，不能直接双击 HTML。
+浏览器打开 **http://127.0.0.1:4173**  使用原生 ES Modules，请通过本地 HTTP 服务运行，不能直接双击 HTML。
 
 Windows 也可以双击 [start.cmd](start.cmd)，它会启动仅监听本机的服务。保持该窗口打开，结束时 Ctrl+C。
 
