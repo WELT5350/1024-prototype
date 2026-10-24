@@ -1,4 +1,10 @@
 import {
+  applyEvidenceChange,
+  applyProfileChange,
+  buildHandoffCard,
+  handoffText,
+} from './insights.js';
+import {
   AS_OF,
   CRITERIA,
   DECISIONS,
@@ -174,8 +180,8 @@ function renderQueueAndDetail() {
     ? list
         .map((company) => {
           const check = evaluateCompany(company, batch.asOf);
-          const complete = check.checks.filter((item) => item.pass).length;
-          return `<button class="company-card ${company.id === ui.selected ? 'selected' : ''}" data-company="${h(company.id)}" aria-pressed="${company.id === ui.selected}"><div class="company-card-top"><span class="company-initial">${h(company.name.slice(0, 1))}</span>${pill(company.decision)}${company.handoff === 'returned' ? '<span class="returned-label">退回</span>' : company.handoff === 'accepted' ? '<span class="accepted-label">已交接</span>' : ''}</div><strong>${h(company.name)}</strong><p>${h(company.scene || '业务场景待补')}</p><div class="company-card-bottom"><span>${h(company.region || '地区待补')} <i>·</i> ${company.evidence.length} 条证据</span><span class="mini-coverage" aria-label="${complete} 项有依据，共四项">${check.checks.map((item) => `<i class="${item.pass ? 'filled' : ''}"></i>`).join('')}</span></div></button>`;
+          const complete = check.factCount;
+          return `<button class="company-card ${company.id === ui.selected ? 'selected' : ''}" data-company="${h(company.id)}" aria-pressed="${company.id === ui.selected}"><div class="company-card-top"><span class="company-initial">${h(company.name.slice(0, 1))}</span>${pill(company.decision)}${company.handoff === 'returned' ? '<span class="returned-label">退回</span>' : company.handoff === 'accepted' ? '<span class="accepted-label">已交接</span>' : ''}</div><strong>${h(company.name)}</strong><p>${h(company.scene || '业务场景待补')}</p><div class="company-card-bottom"><span>${h(company.region || '地区待补')} <i>·</i> ${company.evidence.length} 条证据</span><span class="mini-coverage" aria-label="${complete} / 3 项原文有支撑；来源${check.sourceReady ? '有效' : '待核'}">${check.facts.map((item) => `<i class="${item.pass ? 'filled' : ''}"></i>`).join('')}<i class="source-mini ${check.sourceReady ? 'filled' : ''}"></i></span></div></button>`;
         })
         .join('')
     : `<div class="empty"><span class="empty-icon">${icon('search')}</span><h3>没有符合条件的企业</h3><p>换个关键词，或清除状态筛选。</p><button class="button" data-action="clear">清除筛选</button></div>`;
@@ -191,20 +197,21 @@ function detailHtml(company) {
     .reverse();
   return `<div class="detail-heading"><div><div class="detail-overline">${h(company.key)} <span>企业核查单</span></div><h2>${h(company.name)}</h2><p>${h(company.scene || '业务场景待补')}</p></div><button class="icon-text" data-action="profile">核实画像 ${icon('arrow')}</button></div>
   <div class="profile-row"><span>${h(SUBJECTS[company.identity])}</span><span>${h(USAGES[company.usage])}</span><span>${h(RELATIONS[company.relationship])}</span></div>
+  ${handoffCardHtml(company)}${comparisonHtml(batch.events.filter((event) => event.companyId === company.id).findLast((event) => event.comparison))}
   <div class="detail-columns"><div class="evidence-column"><div class="section-title"><h3>来源与原文 <span>${company.evidence.length}</span></h3><button class="text-button" data-action="add-evidence">${icon('plus')} 补充证据</button></div>
     <div class="evidence-list">${
       company.evidence
         .map((evidence) => {
           const state = inspectEvidence(evidence, batch.asOf);
-          return `<article class="evidence-card" id="evidence-${h(evidence.id)}"><div class="source-heading"><span class="evidence-id">${h(evidence.id)}</span><span class="source-type">${h(evidence.kind)}</span><span class="source-state ${state.usable ? 'ok' : 'warning'}">${state.usable ? '可用于核查' : h(state.problem)}</span></div><h4>${h(evidence.title)}</h4><blockquote>${h(evidence.quote)}</blockquote><div class="source-usage">支撑 ${evidence.supports.length ? evidence.supports.map((key) => h(CRITERIA.find((rule) => rule.id === key)?.label || key)).join(' / ') : '暂无核查项'}</div><div class="source-footer"><span>发布 ${h(evidence.date || '未知')}<br>采集 ${h(evidence.collectedAt || '未知')}</span><button class="source-link" data-source="${h(evidence.id)}">${icon('link')} 原文引用</button><button class="text-button" data-edit-evidence="${h(evidence.id)}">核实 / 编辑</button></div></article>`;
+          return `<article class="evidence-card" id="evidence-${h(evidence.id)}"><div class="source-heading"><span class="evidence-id">${h(evidence.id)}</span><span class="source-type">${h(evidence.kind)}</span><span class="source-state ${state.usable ? 'ok' : 'warning'}">${state.usable ? '可用于核查' : h(state.issues.join(' · '))}</span></div><h4>${h(evidence.title)}</h4><blockquote>${h(evidence.quote)}</blockquote><div class="source-usage">支撑 ${evidence.supports.length ? evidence.supports.map((key) => h(CRITERIA.find((rule) => rule.id === key)?.label || key)).join(' / ') : '暂无核查项'}</div><div class="source-footer"><span>发布 ${h(evidence.date || '未知')}<br>采集 ${h(evidence.collectedAt || '未知')}</span><button class="source-link" data-source="${h(evidence.id)}">${icon('link')} 原文引用</button><button class="text-button" data-edit-evidence="${h(evidence.id)}">核实 / 编辑</button></div></article>`;
         })
         .join('') ||
       '<div class="empty"><h4>还没有证据</h4><p>补充原文、日期和链接，才能开始判断。</p></div>'
     }</div>
     <div class="evidence-note">原文与链接由人工核实；观察窗口仅供演示，不代表生产评分规则。</div>
-    ${relevantEvents.length ? `<section class="history"><div class="section-title"><h3>操作记录</h3><span>最近 ${relevantEvents.length} 条</span></div>${relevantEvents.map((event) => `<div class="history-item"><i></i><div><p>${h(event.detail)}</p><time>${h(new Date(event.at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }))} 北京时间</time></div></div>`).join('')}</section>` : ''}
-  </div><aside class="review-column"><section class="check-panel"><div class="panel-eyebrow">核查依据</div><h3>${result.checks.filter((item) => item.pass).length}<small> / 4 项有依据</small></h3><div class="coverage-track">${result.checks.map((item) => `<span class="${item.pass ? 'filled' : ''}"></span>`).join('')}</div><div class="check-items">${result.checks.map((item) => `<div class="check-item"><span class="check-dot ${item.pass ? 'pass' : ''}">${item.pass ? icon('check') : '?'}</span><div><strong>${item.label}</strong><p>${item.pass ? item.detail : `待补：${item.detail}`}</p><div class="proof-links">${item.proof.map((id) => `<button data-proof="${h(id)}" title="定位证据 ${h(id)}">${h(id)} ↗</button>`).join('')}</div></div></div>`).join('')}</div><div class="suggestion"><span>规则建议</span>${pill(result.suggestion)}<p>${h(result.explanation)}</p></div><button class="text-button rules-link" data-nav="rules">查看核查标准 ${icon('arrow')}</button></section>
-    <section class="human-panel"><div class="panel-eyebrow">人工确认</div><h3>${company.reviewedAt ? '已保存核查结论' : '最后一步，由人判断'}</h3><p>建议供核查参考。选择结论并留下原因，下一位同事才能接手。</p><form id="review-form"><label>核查结论<select name="decision" aria-label="核查结论"><option value="">请选择结论</option>${Object.entries(
+    ${relevantEvents.length ? `<section class="history"><div class="section-title"><h3>操作记录</h3><span>最近 ${relevantEvents.length} 条</span></div>${relevantEvents.map((event) => `<div class="history-item"><i></i><div><p>${h(event.detail)}</p>${event.comparison ? `<button class="text-button" data-comparison="${h(event.id)}">查看字段变化 ↗</button>` : ''}<time>${h(new Date(event.at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }))} 北京时间</time></div></div>`).join('')}</section>` : ''}
+  </div><aside class="review-column"><section class="check-panel"><div class="panel-eyebrow">核查依据</div><h3>${result.factCount}<small> / 3 项原文有支撑</small></h3><div class="source-gate ${result.sourceReady ? 'ready' : 'pending'}">来源有效性：${result.sourceReady ? '已满足' : '待核实'}</div><div class="coverage-track">${result.facts.map((item) => `<span class="${item.pass ? 'filled' : ''}"></span>`).join('')}</div><div class="check-items">${result.checks.map((item) => `<div class="check-item"><span class="check-dot ${item.pass ? 'pass' : ''}">${item.pass ? icon('check') : '?'}</span><div><strong>${item.label}</strong><p>${h(item.note)}</p><div class="proof-links">${item.proof.map((id) => `<button data-proof="${h(id)}" title="定位证据 ${h(id)}">${h(id)} ↗</button>`).join('')}</div></div></div>`).join('')}</div><div class="suggestion"><span>规则建议</span>${pill(result.suggestion)}<p>${h(result.explanation)}</p></div><button class="text-button rules-link" data-nav="rules">查看核查标准 ${icon('arrow')}</button></section>
+    <section class="human-panel" id="review-panel" tabindex="-1"><div class="panel-eyebrow">人工确认</div><h3>${company.reviewedAt ? '已保存核查结论' : '最后一步，由人判断'}</h3><p>建议供核查参考。选择结论并留下原因，下一位同事才能接手。</p><form id="review-form"><label>核查结论<select name="decision" aria-label="核查结论"><option value="">请选择结论</option>${Object.entries(
       DECISIONS,
     )
       .map(
@@ -217,6 +224,23 @@ function detailHtml(company) {
     <section class="handoff-panel"><div class="section-title"><h3>交接记录</h3><span class="small-tag">本地模拟</span></div><p>${company.handoff === 'accepted' ? `已模拟交给 ${h(company.owner)}。` : company.handoff === 'returned' ? `已退回补证：${h(company.feedback)}` : '核查完成后，指定接手人或退回补证。'}</p><div class="handoff-actions"><button class="button" data-action="handoff">${company.handoff === 'accepted' ? '查看交接' : '模拟交接'}</button><button class="button quiet" data-action="return">退回补证</button></div><button class="text-button" data-action="pack">${icon('down')} 导出本家证据包</button></section>
   </aside></div>`;
 }
+function handoffCardHtml(company) {
+  const card = buildHandoffCard(company, batch.asOf);
+  return `<section class="brief-card" aria-label="三行交接卡"><div class="section-title"><h3>三行交接卡 <span>把下一步说清楚</span></h3><button class="text-button" data-action="jump-review">去人工确认 ↓</button></div><dl><dt>业务</dt><dd>${h(card.business)}</dd><dt>依据</dt><dd>${h(card.evidence)}</dd><dt>下一步</dt><dd>${h(card.next)}</dd></dl><div class="brief-actions"><button class="button" data-action="copy-card">复制三行卡</button><button class="text-button" data-action="download-card">下载文本 ↓</button><small>仅整理人工标注，不自动验证事实。</small></div></section>`;
+}
+function comparisonHtml(event) {
+  if (!event) return '';
+  const { before, after } = event.comparison;
+  return `<section class="change-card" aria-label="补证前后对照"><div><strong>这次修改，改变了什么？</strong><p>原文支撑 ${before.factCount}/3 → ${after.factCount}/3 · 来源${before.sourceReady ? '有效' : '待核'} → ${after.sourceReady ? '有效' : '待核'}</p><p>规则建议：${h(DECISIONS[before.suggestion])} → ${h(DECISIONS[after.suggestion])}${before.manualDecision ? ' · 旧人工结论已撤回，需重新确认' : ' · 等待人工确认'}</p><p>当次人工结论：${h(DECISIONS[before.manualDecision] || '未确认')} → ${h(DECISIONS[after.manualDecision] || '未确认')}${before.handoff ? ' · 旧交接状态已撤回' : ''}</p></div><button class="button" data-comparison="${h(event.id)}">查看字段变化</button></section>`;
+}
+function comparisonDialog(id) {
+  const event = batch.events.find((item) => item.id === id);
+  if (!event?.comparison) return;
+  openDialog(
+    '变更前后对照',
+    `<p>${h(event.detail)}</p>${comparisonHtml(event)}<div class="comparison-fields">${event.comparison.fields.map((field) => `<article><h3>${h(field.label)}</h3><div><span>修改前</span><p>${h(field.before)}</p></div><div><span>修改后</span><p>${h(field.after)}</p></div></article>`).join('')}</div><p>这是本机保存的操作对照，不是来源核验或不可篡改审计。</p>`,
+  );
+}
 function overviewHtml(counts) {
   const percent = counts.total ? Math.round((counts.reviewed / counts.total) * 100) : 0;
   const gaps = CRITERIA.map((rule) => ({
@@ -227,10 +251,10 @@ function overviewHtml(counts) {
   }));
   return `<div class="overview-grid"><section class="progress-panel"><div class="section-title"><h2>这一批，核查到哪了？</h2><span class="small-tag">${h(batch.asOf)} 快照</span></div><div class="progress-number">${counts.reviewed}<span> / ${counts.total} 家已核查</span><b>${percent}%</b></div><div class="progress-bar"><span style="width:${percent}%"></span></div><div class="progress-legend"><span><i class="dot blue"></i> 已核查 ${counts.reviewed}</span><span><i class="dot"></i> 尚待核查 ${counts.total - counts.reviewed}</span></div><div class="stage-row"><div><span>当前候选</span><strong>${counts.candidate}</strong><small>人工确认的候选企业</small></div><div><span>已模拟接收</span><strong>${counts.accepted}</strong><small>不等于 CRM 写入</small></div><div><span>新增商机</span><strong class="unknown">—</strong><small>未连接，结果未知</small></div></div><button class="button" data-action="export-csv">${icon('down')} 导出核查结果 CSV</button></section>
     <section class="gap-panel"><div class="section-title"><h2>优先补什么？</h2><span>当前批次 / ${counts.total} 家</span></div>${gaps.map((gap) => `<div class="gap-row"><div><span>${gap.label}</span><strong>${gap.count} <small>家待补</small></strong></div><div class="gap-bar"><span style="width:${counts.total ? (gap.count / counts.total) * 100 : 0}%"></span></div></div>`).join('')}<p>一家企业可同时缺多项，不能把这些数量相加当企业总数。</p></section></div>
-    <section class="panel results-panel"><div class="section-title"><h2>当前状态明细</h2><button class="text-button" data-nav="workspace">回到队列 ${icon('arrow')}</button></div><div class="table-scroll"><table><thead><tr><th scope="col">企业</th><th scope="col">人工结论</th><th scope="col">依据完整度</th><th scope="col">交接</th><th scope="col">负责人</th></tr></thead><tbody>${batch.companies.map((row) => `<tr><td><button class="table-name" data-company="${h(row.id)}">${h(row.name)}</button><small>${h(row.scene)}</small></td><td>${pill(row.decision)}</td><td>${evaluateCompany(row, batch.asOf).checks.filter((item) => item.pass).length} / 4 项</td><td>${row.handoff === 'accepted' ? '已模拟接收' : row.handoff === 'returned' ? '退回补证' : '未交接'}</td><td>${h(row.owner || '未指定')}</td></tr>`).join('') || '<tr><td colspan="5">当前批次暂无企业。请先导入线索。</td></tr>'}</tbody></table></div></section><div class="method-note"><strong>口径说明</strong><p>此处是同一批次的当前状态，不是连续转化漏斗。补证会撤回旧核查与交接状态，历史记录仍保留。候选、已接收与商机不是同一个业务结果。</p></div>`;
+    <section class="panel results-panel"><div class="section-title"><h2>当前状态明细</h2><button class="text-button" data-nav="workspace">回到队列 ${icon('arrow')}</button></div><div class="table-scroll"><table><thead><tr><th scope="col">企业</th><th scope="col">人工结论</th><th scope="col">原文支撑 / 来源</th><th scope="col">交接</th><th scope="col">负责人</th></tr></thead><tbody>${batch.companies.map((row) => `<tr><td><button class="table-name" data-company="${h(row.id)}">${h(row.name)}</button><small>${h(row.scene)}</small></td><td>${pill(row.decision)}</td><td>${evaluateCompany(row, batch.asOf).factCount} / 3 项原文支撑 · 来源${evaluateCompany(row, batch.asOf).sourceReady ? '有效' : '待核'}</td><td>${row.handoff === 'accepted' ? '已模拟接收' : row.handoff === 'returned' ? '退回补证' : '未交接'}</td><td>${h(row.owner || '未指定')}</td></tr>`).join('') || '<tr><td colspan="5">当前批次暂无企业。请先导入线索。</td></tr>'}</tbody></table></div></section><div class="method-note"><strong>口径说明</strong><p>此处是同一批次的当前状态，不是连续转化漏斗。补证会撤回旧核查与交接状态，历史记录仍保留。候选、已接收与商机不是同一个业务结果。</p></div>`;
 }
 function rulesHtml() {
-  return `<div class="rules-intro"><div class="rules-mark">${icon('book')}</div><div><h2>四个问题，一份可复核的判断。</h2><p>不为线索打一个看似精确的分数。先把每个结论对应的原文和缺失项找出来。</p></div></div><div class="rule-grid">${CRITERIA.map((rule) => `<article class="rule-card"><span>${icon(rule.id === 'trace' ? 'link' : 'desk')}</span><h3>${rule.label}</h3><p>${rule.detail}。</p><small>${rule.id === 'identity' ? '集团、猎头、外派与实际用工主体分别核实。主体失效先暂缓。' : rule.id === 'usage' ? '具体模型应用或服务任务才提供依据。会用 Cursor、了解 RAG 不等于企业要采购模型。' : rule.id === 'trace' ? '原文、来源链接、发布与采集日期齐全。未来日期、正文冲突、过期或主体不匹配均标待核。' : '区分外部模型服务、私有部署与服务提供方。尚未确认适配时保留待核，不强推为采购需求。'}</small></article>`).join('')}</div><section class="panel rules-table"><h2>建议如何形成</h2><div class="table-scroll"><table><thead><tr><th scope="col">建议</th><th scope="col">本原型采用的条件</th><th scope="col">下一步</th></tr></thead><tbody><tr><td>${pill('candidate')}</td><td>四项都有近期、可追溯、主体对应的依据</td><td>人工确认；不代表已确认预算或购买意愿</td></tr><tr><td>${pill('verify')}</td><td>缺少任一项，或服务适配尚未确认</td><td>列出缺口，补证后重新核查</td></tr><tr><td>${pill('hold')}</td><td>主体失效，或现有业务描述只有技能、工具使用</td><td>暂缓并保留原因；不推断永久无需求</td></tr></tbody></table></div></section><div class="method-note"><strong>演示参数与范围</strong><p>招聘观察窗口 120 天，其他来源 365 天；均相对批次观察日计算。这是本原型的演示参数，不是生产系统配置。多一种来源不会自动加分，也不会自动得到候选结论。人工结论可以与建议不同，但需写明原因；模拟交接仍要求四项依据完整。</p><p>本原型使用确定性规则组织证据，没有调用大模型，也不声称自动理解或验证了原文真假。AI 的作用体现在开发过程，不伪装为已接入的产品能力。</p></div>`;
+  return `<div class="rules-intro"><div class="rules-mark">${icon('book')}</div><div><h2>三项原文支撑，一道来源核查。</h2><p>不为线索打一个看似精确的分数。先把每个结论对应的原文和缺失项找出来。</p></div></div><div class="rule-grid">${CRITERIA.map((rule) => `<article class="rule-card"><span>${icon(rule.id === 'trace' ? 'link' : 'desk')}</span><h3>${rule.label}</h3><p>${rule.detail}。</p><small>${rule.id === 'identity' ? '集团、猎头、外派与实际用工主体分别核实。主体失效先暂缓。' : rule.id === 'usage' ? '具体模型应用或服务任务才提供依据。会用 Cursor、了解 RAG 不等于企业要采购模型。' : rule.id === 'trace' ? '原文、链接、日期及主体对应齐全。缺日期或过期仍保留内容支撑，但不得交接。每项支撑各自需要当前有效来源，新的无关网页不能替旧证据续期。' : '区分外部模型服务、私有部署与服务提供方。尚未确认适配时保留待核，不强推为采购需求。'}</small></article>`).join('')}</div><section class="panel rules-table"><h2>建议如何形成</h2><div class="table-scroll"><table><thead><tr><th scope="col">建议</th><th scope="col">本原型采用的条件</th><th scope="col">下一步</th></tr></thead><tbody><tr><td>${pill('candidate')}</td><td>三项原文有支撑，且每项都有当前有效来源</td><td>人工确认；不代表已确认预算或购买意愿</td></tr><tr><td>${pill('verify')}</td><td>缺少任一项，或服务适配尚未确认</td><td>列出缺口，补证后重新核查</td></tr><tr><td>${pill('hold')}</td><td>主体失效，或现有业务描述只有技能、工具使用</td><td>暂缓并保留原因；不推断永久无需求</td></tr></tbody></table></div></section><div class="method-note"><strong>演示参数与范围</strong><p>招聘观察窗口 120 天，其他来源 365 天；均相对批次观察日计算。这是本原型的演示参数，不是生产系统配置。多一种来源不会自动加分，也不会自动得到候选结论。人工结论可以与建议不同，但需写明原因；模拟交接仍要求原文支撑与来源有效性完整。</p><p>本原型使用确定性规则组织证据，没有调用大模型，也不声称自动理解或验证了原文真假。AI 的作用体现在开发过程，不伪装为已接入的产品能力。</p></div>`;
 }
 function openDialog(title, body, footer = '') {
   modal.innerHTML = `<div class="modal-heading"><h2 id="modal-title">${h(title)}</h2><button class="icon-button" data-action="close" aria-label="关闭对话框">${icon('close')}</button></div><div class="modal-body">${body}</div>${footer ? `<div class="modal-footer">${footer}</div>` : ''}`;
@@ -264,7 +288,7 @@ function evidenceDialog(evidenceId) {
   const item = selected().evidence.find((row) => row.id === evidenceId);
   openDialog(
     item ? '核实来源与证据' : '补充一条证据',
-    `<p>仅记录你已取得并核实的材料。本操作不会联网采集或验证来源。</p><form id="evidence-form" data-evidence-id="${h(item?.id || '')}"><div class="form-row"><label>来源类型<select name="kind">${SOURCE_TYPES.map((kind) => `<option ${item?.kind === kind ? 'selected' : ''}>${kind}</option>`).join('')}</select></label><label>来源标题<input name="title" value="${h(item?.title || '')}" required maxlength="200" /></label></div><div class="form-row"><label>发布日期（未知可留空）<input type="date" name="date" value="${h(item?.date || '')}" /></label><label>采集日期<input type="date" name="collectedAt" value="${h(item?.collectedAt || batch.asOf)}" /></label></div><label>原文链接<input name="url" type="url" value="${h(item?.url || '')}" maxlength="2000" placeholder="https://…（缺失可留空待核）" /></label><label>原文摘录<textarea name="quote" aria-label="原文摘录" required maxlength="5000" rows="5" placeholder="保留能说明业务任务和主体归属的原文。">${h(item?.quote || '')}</textarea></label><fieldset><legend>原文能支持哪些判断？</legend><div class="checkbox-grid">${CRITERIA.filter(
+    `<p>仅记录你已取得并核实的材料。本操作不会联网采集或验证来源。</p><form id="evidence-form" data-evidence-id="${h(item?.id || '')}"><div class="form-row"><label>来源类型<select name="kind">${SOURCE_TYPES.map((kind) => `<option ${item?.kind === kind ? 'selected' : ''}>${kind}</option>`).join('')}</select></label><label>来源标题<input name="title" value="${h(item?.title || '')}" required maxlength="200" /></label></div><div class="form-row"><label>发布日期（未知可留空）<input type="date" name="date" value="${h(item?.date || '')}" /></label><label>采集日期<input type="date" name="collectedAt" value="${h(item ? item.collectedAt : batch.asOf)}" /></label></div><label>原文链接<input name="url" type="url" value="${h(item?.url || '')}" maxlength="2000" placeholder="https://…（缺失可留空待核）" /></label><label>原文摘录<textarea name="quote" aria-label="原文摘录" required maxlength="5000" rows="5" placeholder="保留能说明业务任务和主体归属的原文。">${h(item?.quote || '')}</textarea></label><fieldset><legend>原文能支持哪些判断？</legend><div class="checkbox-grid">${CRITERIA.filter(
       (rule) => rule.id !== 'trace',
     )
       .map(
@@ -291,17 +315,28 @@ function handoffDialog(action) {
   }
   openDialog(
     action === 'accepted' ? '模拟交接给同事' : '退回补充证据',
-    `<div class="simulation-note">这是一条本地模拟记录，不会通知任何人，也不会写入 CRM。</div><form id="handoff-form" data-mode="${action}"><label>企业<input value="${h(company.name)}" readonly /></label><label>${action === 'accepted' ? '接手负责人' : '补证负责人（可留空）'}<input name="owner" value="${h(company.owner)}" maxlength="80" ${action === 'accepted' ? 'required' : ''} placeholder="例如：演示同事 A" /></label><label>${action === 'accepted' ? '交接说明' : '需要补什么证据'}<textarea name="reason" aria-label="${action === 'accepted' ? '交接说明' : '需要补什么证据'}" required minlength="4" maxlength="2000" placeholder="${action === 'accepted' ? '业务用途、证据与下一步需核实的问题。' : '明确缺失项，方便下一位同事继续。'}">${h(company.feedback)}</textarea></label><button class="button primary full">${action === 'accepted' ? '确认模拟接收' : '保存补证任务'}</button></form>`,
+    `<div class="simulation-note">这是一条本地模拟记录，不会通知任何人，也不会写入 CRM。</div><form id="handoff-form" data-mode="${action}"><label>企业<input value="${h(company.name)}" readonly /></label><label>${action === 'accepted' ? '接手负责人' : '补证负责人（可留空）'}<input name="owner" value="${h(company.owner)}" maxlength="80" ${action === 'accepted' ? 'required' : ''} placeholder="例如：演示同事 A" /></label><label>${action === 'accepted' ? '交接说明' : '需要补什么证据'}<textarea name="reason" aria-label="${action === 'accepted' ? '交接说明' : '需要补什么证据'}" required minlength="4" maxlength="2000" placeholder="${action === 'accepted' ? '业务用途、证据与下一步需核实的问题。' : '明确缺失项，方便下一位同事继续。'}">${h(company.feedback || handoffText(company, batch.asOf))}</textarea></label><button class="button primary full">${action === 'accepted' ? '确认模拟接收' : '保存补证任务'}</button></form>`,
   );
 }
-function invalidateReview(company) {
-  company.decision = null;
-  company.reviewedAt = null;
-  company.reviewReason = '';
-  company.handoff = null;
-  company.feedback = '';
-}
 const actions = {
+  'jump-review': () => {
+    const panel = document.querySelector('#review-panel');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    panel.focus({ preventScroll: true });
+  },
+  'download-card': () => download('handoff-card.txt', handoffText(selected(), batch.asOf)),
+  'copy-card': async () => {
+    const value = handoffText(selected(), batch.asOf);
+    try {
+      await navigator.clipboard.writeText(value);
+      toast('三行交接卡已复制。');
+    } catch {
+      openDialog(
+        '复制三行交接卡',
+        `<p>浏览器未允许自动复制，可全选以下文字复制，或下载文本。</p><textarea class="card-copy" aria-label="三行交接卡文本" readonly rows="8">${h(value)}</textarea><button class="button" data-action="download-card">下载三行卡</button>`,
+      );
+    }
+  },
   close: closeDialog,
   clear: () => {
     ui.filter = 'all';
@@ -366,7 +401,7 @@ const actions = {
 document.addEventListener('click', (event) => {
   const element = event.target.closest('button,a[data-nav]');
   if (!element) return;
-  const { nav, filter, company, action, proof, source, editEvidence } = element.dataset;
+  const { nav, filter, company, action, proof, source, editEvidence, comparison } = element.dataset;
   if (nav) {
     event.preventDefault();
     ui.view = nav;
@@ -396,7 +431,8 @@ document.addEventListener('click', (event) => {
       '原文引用',
       `<span class="small-tag">${h(item.kind)}</span><h3>${h(item.title)}</h3><blockquote class="source-quote">${h(item.quote)}</blockquote><p class="reference-url">${h(item.url || '链接待补')}</p><p>发布：${h(item.date || '未知')} · 采集：${h(item.collectedAt || '未知')}</p><p>内置 example.com 链接为虚构引用，不能当作真实企业证据。本页不会打开或联网核验来源。</p>`,
     );
-  } else if (editEvidence) evidenceDialog(editEvidence);
+  } else if (comparison) comparisonDialog(comparison);
+  else if (editEvidence) evidenceDialog(editEvidence);
   else if (action && actions[action]) actions[action]();
 });
 document.addEventListener('input', (event) => {
@@ -429,17 +465,14 @@ document.addEventListener('submit', (event) => {
       )
         closeDialog();
     } else if (form.id === 'profile-form') {
-      for (const key of ['scene', 'identity', 'usage', 'relationship'])
-        company[key] = data.get(key).trim();
-      invalidateReview(company);
-      next.events.push({
-        id: uid('log'),
-        companyId: company.id,
-        action: 'profile',
-        at: new Date().toISOString(),
-        detail: '核实并修改企业画像，旧结论已撤回，需要重新核查。',
-      });
-      if (commit(next, '企业画像已保存，请重新核查。')) closeDialog();
+      const fields = Object.fromEntries(
+        ['scene', 'identity', 'usage', 'relationship'].map((key) => [key, data.get(key).trim()]),
+      );
+      const changed = applyProfileChange(next, company.id, fields);
+      if (!changed) {
+        toast('没有字段变化，保留原结论。');
+        closeDialog();
+      } else if (commit(next, '企业画像已保存，请重新核查。')) closeDialog();
     } else {
       const date = data.get('date'),
         collectedAt = data.get('collectedAt'),
@@ -460,18 +493,11 @@ document.addEventListener('submit', (event) => {
         dateConflict: data.get('dateConflict') === 'on',
       };
       if (!item.title || !item.quote) throw new Error('标题和原文不能为空。');
-      const index = company.evidence.findIndex((row) => row.id === item.id);
-      if (index >= 0) company.evidence[index] = item;
-      else company.evidence.push(item);
-      invalidateReview(company);
-      next.events.push({
-        id: uid('log'),
-        companyId: company.id,
-        action: 'evidence',
-        at: new Date().toISOString(),
-        detail: `${index >= 0 ? '核实更新' : '补充'}证据 ${item.id}，旧结论已撤回，需要重新核查。`,
-      });
-      if (commit(next, '证据已保存，核查依据已更新。')) closeDialog();
+      const changed = applyEvidenceChange(next, company.id, item);
+      if (!changed) {
+        toast('没有字段变化，保留原结论。');
+        closeDialog();
+      } else if (commit(next, '证据已保存，核查依据已更新。')) closeDialog();
     }
   } catch (error) {
     toast(error.message, true);

@@ -2222,3 +2222,136 @@ dialog::backdrop {
     scroll-behavior: auto !important;
   }
 }
+/* Keep business support separate from source validity and close to the next action. */
+.brief-card {
+  margin: 16px 0;
+  padding: 20px;
+  background: #f1f8f7;
+  border: 1px solid #cce3df;
+  border-radius: 12px;
+}
+.brief-card h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.brief-card h3 span {
+  color: #526c70;
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 8px;
+}
+.brief-card dl {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.brief-card dt {
+  font-weight: 600;
+  color: #23776f;
+}
+.brief-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.brief-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brief-actions small {
+  color: #5c6d7d;
+}
+.source-gate {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin: 12px 0;
+}
+.source-gate.ready {
+  color: #21675e;
+  background: #e6f3ee;
+}
+.source-gate.pending {
+  color: #805317;
+  background: #fff0d5;
+}
+.change-card {
+  padding: 16px 18px;
+  border: 1px solid #d5dfec;
+  border-left: 3px solid #637fbc;
+  background: #f6f8fc;
+  border-radius: 8px;
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.change-card strong {
+  font-size: 14px;
+}
+.change-card p {
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 5px 0 0;
+}
+.change-card button {
+  flex-shrink: 0;
+}
+.comparison-fields article {
+  margin: 14px 0;
+  border: 1px solid #d5dfec;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.comparison-fields h3 {
+  margin: 0;
+  padding: 12px;
+  background: #f1f5fa;
+  font-size: 14px;
+}
+.comparison-fields article > div {
+  padding: 10px 12px;
+}
+.comparison-fields span {
+  color: #617087;
+  font-size: 12px;
+}
+.comparison-fields p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 6px 0;
+  font-size: 13px;
+}
+.card-copy {
+  width: 100%;
+  line-height: 1.8;
+}
+#review-panel {
+  scroll-margin-top: 24px;
+}
+@media (max-width: 640px) {
+  .brief-card {
+    padding: 14px;
+  }
+  .brief-card .section-title {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .brief-card h3 span {
+    display: block;
+    margin: 6px 0 0;
+  }
+  .brief-card dl {
+    gap: 10px;
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .change-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

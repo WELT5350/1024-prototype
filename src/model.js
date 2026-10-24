@@ -16,7 +16,7 @@ export const RELATIONS = {
 export const CRITERIA = [
   { id: 'identity', label: '主体对应', detail: '原文归属与企业主体一致' },
   { id: 'usage', label: '用途具体', detail: '具体业务任务，不只是技能词' },
-  { id: 'trace', label: '来源可追溯', detail: '原文、链接和日期完整且有效' },
+  { id: 'trace', label: '来源有效性', detail: '原文、链接和日期完整且有效' },
   { id: 'fit', label: '服务关系', detail: '模型服务与这项业务存在合理关系' },
 ];
 export const SOURCE_TYPES = ['招聘', '官网', '技术文章', '招投标', '知识产权'];
@@ -45,35 +45,57 @@ export function inspectEvidence(evidence, asOf) {
   const collected = dateValue(evidence.collectedAt);
   const today = dateValue(asOf);
   const window = evidence.kind === '招聘' ? 120 : 365;
-  let problem = '';
-  if (evidence.dateConflict) problem = '日期与正文冲突';
-  else if (published === null || collected === null) problem = '日期不完整';
-  else if (published > today || collected > today) problem = '日期晚于观察日';
-  else if (published > collected) problem = '采集早于发布日期';
-  else if (!safeUrl(evidence.url) || !evidence.quote.trim()) problem = '缺原文或有效链接';
-  else if (today - published > window * 86400000) problem = '超过演示观察窗口';
-  else if (!evidence.entityMatch) problem = '原文主体尚未对应';
-  return { usable: !problem, problem, window };
+  const issues = [];
+  if (evidence.dateConflict) issues.push('日期与正文冲突');
+  if (published === null) issues.push('发布日期待补');
+  if (collected === null) issues.push('采集日期待补');
+  if (published > today || collected > today) issues.push('日期晚于观察日');
+  if (published !== null && collected !== null && published > collected)
+    issues.push('采集早于发布日期');
+  if (!safeUrl(evidence.url)) issues.push('有效链接待补');
+  if (!evidence.quote.trim()) issues.push('原文待补');
+  if (published !== null && today - published > window * 86400000) issues.push('超过演示观察窗口');
+  if (!evidence.entityMatch) issues.push('原文主体尚未对应');
+  return { usable: !issues.length, problem: issues[0] || '', issues, window };
 }
 export function evaluateCompany(company, asOf) {
   const usable = company.evidence.filter((item) => inspectEvidence(item, asOf).usable);
-  const proofFor = (key) =>
-    usable.filter((item) => item.supports.includes(key)).map((item) => item.id);
-  const ids = Object.fromEntries(CRITERIA.map((rule) => [rule.id, proofFor(rule.id)]));
-  const checks = [
-    {
-      ...CRITERIA[0],
-      pass: company.identity === 'verified' && ids.identity.length > 0,
-      proof: ids.identity,
-    },
-    {
-      ...CRITERIA[1],
-      pass: company.usage === 'application' && ids.usage.length > 0,
-      proof: ids.usage,
-    },
-    { ...CRITERIA[2], pass: usable.length > 0, proof: usable.map((item) => item.id) },
-    { ...CRITERIA[3], pass: company.relationship === 'api' && ids.fit.length > 0, proof: ids.fit },
-  ];
+  const facts = ['identity', 'usage', 'fit'].map((id) => {
+    const rule = CRITERIA.find((item) => item.id === id);
+    const proof = company.evidence
+      .filter((item) => item.entityMatch && item.quote.trim() && item.supports.includes(id))
+      .map((item) => item.id);
+    const currentProof = usable.filter((item) => item.supports.includes(id)).map((item) => item.id);
+    const classified =
+      id === 'identity'
+        ? company.identity === 'verified'
+        : id === 'usage'
+          ? company.usage === 'application'
+          : company.relationship === 'api';
+    const pass = classified && proof.length > 0;
+    const ready = pass && currentProof.length > 0;
+    const note = pass
+      ? ready
+        ? '原文有支撑，且有有效来源。'
+        : '原文有支撑；来源日期、时效或链接仍待核。'
+      : id === 'fit' && company.relationship === 'private'
+        ? '私有部署已记录，外部服务适配仍待核。'
+        : `待核：${rule.detail}`;
+    return { ...rule, proof, currentProof, pass, ready, note };
+  });
+  // Every supported criterion needs its own current source. A fresh unrelated page cannot refresh an expired API claim.
+  const sourceReady = usable.length > 0 && facts.every((item) => !item.pass || item.ready);
+  const trace = {
+    ...CRITERIA[2],
+    pass: sourceReady,
+    ready: sourceReady,
+    proof: usable.map((item) => item.id),
+    currentProof: usable.map((item) => item.id),
+    note: sourceReady
+      ? '已有有效来源覆盖各项原文支撑。'
+      : '先补日期、链接或当前有效原文；已有内容支撑仍保留。',
+  };
+  const checks = [facts[0], facts[1], trace, facts[2]];
   const missing = checks.filter((check) => !check.pass);
   const suggestion =
     company.identity === 'invalid' || company.usage === 'skills'
@@ -88,8 +110,17 @@ export function evaluateCompany(company, asOf) {
         ? '目前只证明技能要求或工具使用，尚未证明具体模型业务。'
         : missing.length
           ? `还需核实：${missing.map((item) => item.label).join('、')}。缺证据不等于无需求。`
-          : '四项依据已齐，可以人工确认候选；仍未证明采购预算或购买意愿。';
-  return { checks, suggestion, missing, explanation, complete: missing.length === 0 };
+          : '原文支撑与来源有效性已齐，可以人工确认候选；采购预算和购买意愿仍未知。';
+  return {
+    checks,
+    facts,
+    factCount: facts.filter((item) => item.pass).length,
+    sourceReady,
+    suggestion,
+    missing,
+    explanation,
+    complete: missing.length === 0,
+  };
 }
 export function reviewCompany(batch, id, decision, reason) {
   const company = batch.companies.find((item) => item.id === id);
@@ -267,6 +298,9 @@ export function validateBatch(input) {
       action: event.action,
       at: text(event.at, 40, '时间'),
       detail: text(event.detail, 3000, '记录内容'),
+      ...(event.comparison === undefined
+        ? {}
+        : { comparison: validateComparison(event.comparison) }),
     };
   });
   return {
@@ -276,5 +310,39 @@ export function validateBatch(input) {
     asOf: input.asOf,
     companies,
     events,
+  };
+}
+
+function validateComparison(value) {
+  if (!value || !Array.isArray(value.fields) || !value.fields.length || value.fields.length > 20)
+    throw new Error('变更对照格式无效。');
+  const snapshot = (row) => {
+    if (
+      !row ||
+      !Object.hasOwn(DECISIONS, row.suggestion) ||
+      !Number.isInteger(row.factCount) ||
+      row.factCount < 0 ||
+      row.factCount > 3 ||
+      typeof row.sourceReady !== 'boolean' ||
+      ![null, ...Object.keys(DECISIONS)].includes(row.manualDecision) ||
+      ![null, 'accepted', 'returned'].includes(row.handoff)
+    )
+      throw new Error('变更对照快照无效。');
+    return {
+      suggestion: row.suggestion,
+      factCount: row.factCount,
+      sourceReady: row.sourceReady,
+      manualDecision: row.manualDecision,
+      handoff: row.handoff,
+    };
+  };
+  return {
+    before: snapshot(value.before),
+    after: snapshot(value.after),
+    fields: value.fields.map((field) => ({
+      label: text(field.label, 100, '变更字段'),
+      before: text(field.before, 6000, '变更前'),
+      after: text(field.after, 6000, '变更后'),
+    })),
   };
 }
