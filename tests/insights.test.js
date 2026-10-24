@@ -129,3 +129,12 @@ test('三行卡包含编号、来源状态、人工结论和未知项，CSV与�
   assert.match(evidencePack(b, c), /三行交接卡/);
   assert.match(exportReviews(b), /三行卡-下一步/);
 });
+
+test('文字刚好等于空值显示文案，仍按实际字段识别变更', () => {
+  const b = createDemo();
+  const c = b.companies[0];
+  c.scene = '';
+  const event = applyProfileChange(b, c.id, { scene: '未记录' });
+  assert.ok(event);
+  assert.equal(c.scene, '未记录');
+});

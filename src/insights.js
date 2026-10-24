@@ -36,9 +36,12 @@ const display = (key, value) => {
 };
 function change(batch, company, values, labels, action, detail, mutate) {
   const fields = Object.entries(labels).flatMap(([key, label]) => {
+    const canonical = (value) =>
+      key === 'supports' ? JSON.stringify([...new Set(value || [])].sort()) : value;
+    if (canonical(values.before?.[key]) === canonical(values.after[key])) return [];
     const before = display(key, values.before?.[key] ?? (key === 'supports' ? [] : ''));
     const after = display(key, values.after[key]);
-    return before === after ? [] : [{ label, before, after }];
+    return [{ label, before, after }];
   });
   if (!fields.length) return null;
   const before = snapshot(company, batch.asOf);
