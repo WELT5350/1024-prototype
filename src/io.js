@@ -1,3 +1,4 @@
+import { applyEvidenceChange, buildHandoffCard, handoffText } from './insights.js';
 import {
   SOURCE_TYPES,
   CRITERIA,
@@ -193,22 +194,8 @@ export function importCsv(input, original) {
       duplicate++;
       return;
     }
-    company.evidence.push(item);
+    applyEvidenceChange(batch, company.id, item, 'CSV 导入证据');
     added++;
-    if (company.reviewedAt) {
-      company.decision = null;
-      company.reviewedAt = null;
-      company.reviewReason = '';
-      company.handoff = null;
-      company.feedback = '';
-      batch.events.push({
-        id: uid('log'),
-        companyId: company.id,
-        action: 'evidence',
-        at: new Date().toISOString(),
-        detail: '导入了新证据，已撤回旧核查与交接状态，需要重新确认。',
-      });
-    }
   });
   return { batch: validateBatch(batch), added, duplicate };
 }
@@ -226,6 +213,9 @@ export function exportReviews(batch) {
       '负责人',
       '模拟交接状态',
       '交接说明',
+      '三行卡-业务',
+      '三行卡-依据',
+      '三行卡-下一步',
     ],
     ...batch.companies.map((company) => [
       batch.name,
@@ -243,6 +233,7 @@ export function exportReviews(batch) {
           ? '退回补证'
           : '未交接',
       company.feedback,
+      ...Object.values(buildHandoffCard(company, batch.asOf)),
     ]),
   ]);
 }
@@ -254,7 +245,7 @@ export function evidencePack(batch, company) {
       .split('\n')
       .map((line) => `> ${line}`)
       .join('\n');
-  return `# 线索交接包 · ${company.name}\n\n> 演示原型。内置资料为虚构样本；本地核查不代表线上评分、采购意愿或商机。\n\n批次：${batch.name}\n\n观察日：${batch.asOf}\n\n业务场景：${company.scene}\n\n人工结论：${DECISIONS[company.decision] || '未核查'}\n\n判断依据：\n${plain(company.reviewReason || '尚未填写')}\n\n负责人：${company.owner || '未指定'}\n\n交接：${company.handoff === 'accepted' ? '模拟接收' : company.handoff === 'returned' ? '退回补证' : '未交接'}\n\n交接说明：\n${plain(company.feedback || '尚未填写')}\n\n## 标准核查\n\n${check.checks.map((item) => `- ${item.pass ? '有依据' : '待核实'}：${item.label}（${item.proof.join('、') || '暂无有效证据'}）`).join('\n')}\n\n## 来源与原文\n\n${company.evidence.map((item) => `### ${item.id} · ${item.kind} · ${item.title}\n\n发布日期：${item.date || '未知'}；采集日期：${item.collectedAt || '未知'}\n\n原始链接（仅作引用，不嵌入加载）：\n${plain(item.url || '待补')}\n\n${plain(item.quote)}\n`).join('\n')}\n## 待补事项\n\n${check.missing.map((item) => `- ${item.label}：${item.detail}`).join('\n') || '四项已齐；仍需后续人工核实真实采购意愿与预算。'}\n`;
+  return `# 线索交接包 · ${company.name}\n\n> 演示原型。内置资料为虚构样本；本地核查不代表线上评分、采购意愿或商机。\n\n批次：${batch.name}\n\n观察日：${batch.asOf}\n\n业务场景：${company.scene}\n\n人工结论：${DECISIONS[company.decision] || '未核查'}\n\n判断依据：\n${plain(company.reviewReason || '尚未填写')}\n\n负责人：${company.owner || '未指定'}\n\n交接：${company.handoff === 'accepted' ? '模拟接收' : company.handoff === 'returned' ? '退回补证' : '未交接'}\n\n交接说明：\n${plain(company.feedback || '尚未填写')}\n\n## 三行交接卡\n\n${plain(handoffText(company, batch.asOf))}\n\n## 标准核查\n\n${check.checks.map((item) => `- ${item.pass ? '有支撑' : '待核实'}：${item.label}：${item.note}（${item.proof.join('、') || '暂无有效证据'}）`).join('\n')}\n\n## 来源与原文\n\n${company.evidence.map((item) => `### ${item.id} · ${item.kind} · ${item.title}\n\n发布日期：${item.date || '未知'}；采集日期：${item.collectedAt || '未知'}\n\n原始链接（仅作引用，不嵌入加载）：\n${plain(item.url || '待补')}\n\n${plain(item.quote)}\n`).join('\n')}\n## 待补事项\n\n${check.missing.map((item) => `- ${item.label}：${item.detail}`).join('\n') || '四项已齐；仍需后续人工核实真实采购意愿与预算。'}\n`;
 }
 export const STORAGE_KEY = 'evidence-desk.v1';
 export function loadBatch(storage, fallback) {
