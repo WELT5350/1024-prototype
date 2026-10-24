@@ -145,7 +145,11 @@ try {
   await page.getByRole('button', { name: '确认保存到本机', exact: true }).click();
   await page.getByRole('button', { name: '批次进度', exact: true }).click();
   await expect(page.getByText('未连接，结果未知', { exact: true })).toBeVisible();
-  await page.screenshot({ path: 'demo/progress.png', fullPage: true });
+  await page.screenshot({
+    path: 'demo/progress.png',
+    fullPage: true,
+    style: '#recording-caption, #toast { visibility: hidden !important; }',
+  });
   await caption(
     '同一个批次，同一个分母',
     '当前已核查、候选与接收可重叠，不能当连续漏斗相乘。新增商机未连接，保留未知。',
