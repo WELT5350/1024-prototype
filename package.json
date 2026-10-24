@@ -1,0 +1,23 @@
+{
+  "name": "evidence-desk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "线索证据台：从公开线索到可复核的交接",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node scripts/server.mjs",
+    "test": "node --test tests/*.test.js",
+    "lint": "eslint src scripts tests playwright.config.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run lint && npm run format:check && npm test",
+    "test:ui": "playwright test",
+    "demo": "node scripts/record-demo.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "eslint": "^9.39.0",
+    "prettier": "^3.7.0"
+  }
+}
