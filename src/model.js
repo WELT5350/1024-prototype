@@ -93,7 +93,7 @@ export function evaluateCompany(company, asOf) {
 }
 export function reviewCompany(batch, id, decision, reason) {
   const company = batch.companies.find((item) => item.id === id);
-  if (!company || !DECISIONS[decision]) throw new Error('请选择有效的核查结论。');
+  if (!company || !Object.hasOwn(DECISIONS, decision)) throw new Error('请选择有效的核查结论。');
   if (typeof reason !== 'string' || reason.trim().length < 4)
     throw new Error('请写至少 4 个字的判断依据。');
   if (reason.length > 2000) throw new Error('判断依据最多 2000 字。');
@@ -177,10 +177,10 @@ export function validateBatch(input) {
     if (!id || used.has(id)) throw new Error('企业编号缺失或重复。');
     used.add(id);
     if (
-      !SUBJECTS[row.identity] ||
-      !USAGES[row.usage] ||
-      !RELATIONS[row.relationship] ||
-      (row.decision !== null && !DECISIONS[row.decision])
+      !Object.hasOwn(SUBJECTS, row.identity) ||
+      !Object.hasOwn(USAGES, row.usage) ||
+      !Object.hasOwn(RELATIONS, row.relationship) ||
+      (row.decision !== null && !Object.hasOwn(DECISIONS, row.decision))
     )
       throw new Error('企业核查状态无效。');
     if (!Array.isArray(row.evidence) || row.evidence.length > 50)

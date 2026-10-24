@@ -6,6 +6,9 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+      : {},
     baseURL: 'http://127.0.0.1:4173',
     browserName: 'chromium',
     viewport: { width: 1512, height: 982 },

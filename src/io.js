@@ -121,7 +121,11 @@ export function importCsv(input, original) {
     if (values.length !== header.length) fail('列数与表头不一致。');
     const entry = Object.fromEntries(header.map((name, i) => [name, values[i].trim()]));
     if (!entry.企业名称 || !entry.去重标识) fail('企业名称和去重标识必填。');
-    if (!SUBJECTS[entry.主体状态] || !USAGES[entry.业务用途] || !RELATIONS[entry.服务关系])
+    if (
+      !Object.hasOwn(SUBJECTS, entry.主体状态) ||
+      !Object.hasOwn(USAGES, entry.业务用途) ||
+      !Object.hasOwn(RELATIONS, entry.服务关系)
+    )
       fail('核查状态值不正确，请参考模板。');
     if (!SOURCE_TYPES.includes(entry.来源类型) || !entry.来源标题 || !entry.原文摘录)
       fail('来源类型、标题与原文必填。');

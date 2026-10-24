@@ -264,7 +264,7 @@ function evidenceDialog(evidenceId) {
   const item = selected().evidence.find((row) => row.id === evidenceId);
   openDialog(
     item ? '核实来源与证据' : '补充一条证据',
-    `<p>仅记录你已取得并核实的材料。本操作不会联网采集或验证来源。</p><form id="evidence-form" data-evidence-id="${h(item?.id || '')}"><div class="form-row"><label>来源类型<select name="kind">${SOURCE_TYPES.map((kind) => `<option ${item?.kind === kind ? 'selected' : ''}>${kind}</option>`).join('')}</select></label><label>来源标题<input name="title" value="${h(item?.title || '')}" required maxlength="200" /></label></div><div class="form-row"><label>发布日期（未知可留空）<input type="date" name="date" value="${h(item?.date || '')}" /></label><label>采集日期<input type="date" name="collectedAt" value="${h(item?.collectedAt || batch.asOf)}" /></label></div><label>原文链接<input name="url" type="url" value="${h(item?.url || '')}" maxlength="2000" placeholder="https://…（缺失可留空待核）" /></label><label>原文摘录<textarea name="quote" required maxlength="5000" rows="5" placeholder="保留能说明业务任务和主体归属的原文。">${h(item?.quote || '')}</textarea></label><fieldset><legend>原文能支持哪些判断？</legend><div class="checkbox-grid">${CRITERIA.filter(
+    `<p>仅记录你已取得并核实的材料。本操作不会联网采集或验证来源。</p><form id="evidence-form" data-evidence-id="${h(item?.id || '')}"><div class="form-row"><label>来源类型<select name="kind">${SOURCE_TYPES.map((kind) => `<option ${item?.kind === kind ? 'selected' : ''}>${kind}</option>`).join('')}</select></label><label>来源标题<input name="title" value="${h(item?.title || '')}" required maxlength="200" /></label></div><div class="form-row"><label>发布日期（未知可留空）<input type="date" name="date" value="${h(item?.date || '')}" /></label><label>采集日期<input type="date" name="collectedAt" value="${h(item?.collectedAt || batch.asOf)}" /></label></div><label>原文链接<input name="url" type="url" value="${h(item?.url || '')}" maxlength="2000" placeholder="https://…（缺失可留空待核）" /></label><label>原文摘录<textarea name="quote" aria-label="原文摘录" required maxlength="5000" rows="5" placeholder="保留能说明业务任务和主体归属的原文。">${h(item?.quote || '')}</textarea></label><fieldset><legend>原文能支持哪些判断？</legend><div class="checkbox-grid">${CRITERIA.filter(
       (rule) => rule.id !== 'trace',
     )
       .map(
@@ -291,7 +291,7 @@ function handoffDialog(action) {
   }
   openDialog(
     action === 'accepted' ? '模拟交接给同事' : '退回补充证据',
-    `<div class="simulation-note">这是一条本地模拟记录，不会通知任何人，也不会写入 CRM。</div><form id="handoff-form" data-mode="${action}"><label>企业<input value="${h(company.name)}" readonly /></label><label>${action === 'accepted' ? '接手负责人' : '补证负责人（可留空）'}<input name="owner" value="${h(company.owner)}" maxlength="80" ${action === 'accepted' ? 'required' : ''} placeholder="例如：演示同事 A" /></label><label>${action === 'accepted' ? '交接说明' : '需要补什么证据'}<textarea name="reason" required minlength="4" maxlength="2000" placeholder="${action === 'accepted' ? '业务用途、证据与下一步需核实的问题。' : '明确缺失项，方便下一位同事继续。'}">${h(company.feedback)}</textarea></label><button class="button primary full">${action === 'accepted' ? '确认模拟接收' : '保存补证任务'}</button></form>`,
+    `<div class="simulation-note">这是一条本地模拟记录，不会通知任何人，也不会写入 CRM。</div><form id="handoff-form" data-mode="${action}"><label>企业<input value="${h(company.name)}" readonly /></label><label>${action === 'accepted' ? '接手负责人' : '补证负责人（可留空）'}<input name="owner" value="${h(company.owner)}" maxlength="80" ${action === 'accepted' ? 'required' : ''} placeholder="例如：演示同事 A" /></label><label>${action === 'accepted' ? '交接说明' : '需要补什么证据'}<textarea name="reason" aria-label="${action === 'accepted' ? '交接说明' : '需要补什么证据'}" required minlength="4" maxlength="2000" placeholder="${action === 'accepted' ? '业务用途、证据与下一步需核实的问题。' : '明确缺失项，方便下一位同事继续。'}">${h(company.feedback)}</textarea></label><button class="button primary full">${action === 'accepted' ? '确认模拟接收' : '保存补证任务'}</button></form>`,
   );
 }
 function invalidateReview(company) {
@@ -500,23 +500,19 @@ document.addEventListener('change', async (event) => {
       `<p>${h(description)}</p><button class="text-button" data-action="backup">下载当前备份</button>`,
       '<button class="button" data-action="close">取消</button><button class="button primary" id="confirm-import">确认保存到本机</button>',
     );
-    modal.querySelector('#confirm-import').addEventListener(
-      'click',
-      () => {
-        try {
-          const raw = storage.getItem(STORAGE_KEY);
-          if (raw) storage.setItem(`${STORAGE_KEY}.previous`, raw);
-        } catch {
-          toast('旧存储备份失败，未导入。', true);
-          return;
-        }
-        ui.filter = 'all';
-        ui.search = '';
-        ui.selected = next.companies[0]?.id;
-        if (commit(next, '批次已保存到本机，未上传任何内容。', true)) closeDialog();
-      },
-      { once: true },
-    );
+    modal.querySelector('#confirm-import').addEventListener('click', () => {
+      try {
+        const raw = storage.getItem(STORAGE_KEY);
+        if (raw) storage.setItem(`${STORAGE_KEY}.previous`, raw);
+      } catch {
+        toast('旧存储备份失败，未导入。', true);
+        return;
+      }
+      ui.filter = 'all';
+      ui.search = '';
+      ui.selected = next.companies[0]?.id;
+      if (commit(next, '批次已保存到本机，未上传任何内容。', true)) closeDialog();
+    });
   } catch (error) {
     event.target.value = '';
     toast(`未导入：${error.message}`, true);

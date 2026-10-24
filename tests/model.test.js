@@ -169,6 +169,9 @@ test('备份只接受有效schema、唯一ID与完整交接，不接受伪造结
       b.version = 999;
     },
     (b) => {
+      b.companies[0].identity = '__proto__';
+    },
+    (b) => {
       b.companies[1].id = b.companies[0].id;
     },
     (b) => {

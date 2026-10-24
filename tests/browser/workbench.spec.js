@@ -99,7 +99,7 @@ test('搜索、空状态、移动端与键盘无横向溢出', async ({ page }) 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).not.toBeVisible();
 });
-test('存储损坏不静默覆盖，HTML作为文本显示，不产生外部请求', async ({ page }) => {
+test('存储损坏不静默覆盖，私有工作目录不会由服务暴露', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('evidence-desk.v1', '{broken'));
   await page.goto('/');
   await expect(page.getByRole('alert')).toContainText('尚未覆盖原数据');
@@ -109,4 +109,47 @@ test('存储损坏不静默覆盖，HTML作为文本显示，不产生外部请�
   const response = await page.request.get('/.work/rules-09.png');
   expect(response.status()).toBe(404);
   expect((await page.request.get('/.git/config')).status()).toBe(404);
+});
+
+test('导入HTML只显示文本，应用不产生外部网络请求', async ({ page }) => {
+  const external = [];
+  page.on('request', (request) => {
+    if (!request.url().startsWith('http://127.0.0.1:4173/')) external.push(request.url());
+  });
+  await page.goto('/');
+  const malicious = templateCsv().replace(
+    '该虚构企业使用外部模型服务生成会议纪要，运营主体已对应。',
+    '<img src=https://example.com/track onerror=alert(1)>',
+  );
+  await page.getByRole('button', { name: '导入线索', exact: true }).click();
+  await page
+    .locator('#csv-file')
+    .setInputFiles({ name: 'html.csv', mimeType: 'text/csv', buffer: Buffer.from(malicious) });
+  await page.getByRole('button', { name: '确认保存到本机', exact: true }).click();
+  await page.getByRole('button', { name: /示例企业（虚构）/ }).click();
+  await expect(page.locator('blockquote')).toHaveText(
+    '<img src=https://example.com/track onerror=alert(1)>',
+  );
+  expect(await page.locator('blockquote img').count()).toBe(0);
+  expect(external).toEqual([]);
+});
+
+test('存储配额失败不会显示保存成功，跨标签页更新暂停旧页写入', async ({ page, context }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '按核查项填写草稿' }).click();
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException('存储已满', 'QuotaExceededError');
+    };
+  });
+  await page.getByRole('button', { name: '保存核查结论', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('未保存');
+  await expect(page.getByRole('heading', { name: '最后一步，由人判断' })).toBeVisible();
+  await page.reload();
+  const other = await context.newPage();
+  await other.goto('/');
+  await other.getByRole('button', { name: '按核查项填写草稿' }).click();
+  await other.getByRole('button', { name: '保存核查结论', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('另一个标签页');
+  await other.close();
 });
